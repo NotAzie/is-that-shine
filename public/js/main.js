@@ -1,55 +1,13 @@
-import { createShell } from './shell.js';
-import { createCameraPipeline } from './camera_pipeline.js';
-import { createModes } from './modes/index.js';
-import { createIdentity } from './identity.js';
-import { createPresets } from './presets.js';
-import { createAudio } from './audio.js';
+import { createApp } from './app.js';
+import { showFatal } from './shell.js';
 
-let shellApi = null;
-
-export function run() {
-  const presets = createPresets();
-  const audio = createAudio();
-  const cameraPipeline = createCameraPipeline({
-    onReady: () => {
-      audio.enable();
-    },
+createApp()
+  .then((app) => {
+    if (new URLSearchParams(window.location.search).has('debug')) {
+      window.__echo = app;
+    }
+  })
+  .catch((error) => {
+    console.error('[echo.us] failed to start', error);
+    showFatal(error?.message || 'Something went wrong while starting the piece.');
   });
-  const modes = createModes();
-  const identity = createIdentity({
-    onModeChange: (mode) => {
-      modes.select(mode);
-      presets.setActiveMode(mode);
-    },
-  });
-  const shell = createShell({
-    modes: modes.list(),
-    onModeSelect: (mode) => {
-      identity.setMode(mode);
-      presets.setActiveMode(mode);
-      audio.chime();
-    },
-    onPresetLoad: () => {
-      const current = presets.active();
-      if (current) {
-        identity.apply(current);
-        modes.select(current.mode);
-      }
-    },
-    onCameraReady: () => {
-      // gate opens once the pipeline reports ready, not on the raw request.
-    },
-  });
-
-  identity.setMode(presets.active()?.mode ?? 'prism');
-  shell.start({
-    modes,
-    identity,
-    presets,
-    audio,
-    cameraPipeline,
-  });
-  shellApi = shell;
-  shellApi.onCameraReady && shellApi.onCameraReady();
-
-}

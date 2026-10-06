@@ -1,21 +1,33 @@
 {
   "name": "echo.us — prism mode",
   "short_name": "echo.us",
+  "description": "A live WebGL reflection piece lit by your camera. Processed on your device, never uploaded.",
+  "id": "./",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#02030a",
   "theme_color": "#02030a",
-  "description": "A live WebGL art piece lit by your reflection.",
+  "categories": ["art", "entertainment"],
   "icons": [
     {
       "src": "icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

@@ -1,334 +1,381 @@
-const DOM = {
-  prismCanvas: document.getElementById('prism-canvas'),
-  threeCanvas: document.getElementById('three-canvas'),
-  video: document.getElementById('cam-video'),
-  gate: document.getElementById('gate'),
-  gateTitle: document.getElementById('gate-title'),
-  gateSub: document.getElementById('gate-sub'),
-  allowBtn: document.getElementById('allow-btn'),
-  modes: document.getElementById('modes'),
-  hudLogo: document.getElementById('hud-logo'),
-  hudStatus: document.getElementById('hud-status'),
-  hudDot: document.getElementById('hud-dot'),
-  hudLabel: document.getElementById('hud-label'),
-  psych: document.getElementById('psych'),
-  cursor: document.getElementById('cursor'),
-  cursorRing: document.getElementById('cursor-ring'),
-  corners: Array.from(document.querySelectorAll('.corner')),
-  scanlines: document.getElementById('scanlines'),
-  vignette: document.getElementById('vignette'),
+/**
+ * The DOM shell.
+ *
+ * Owns everything the visitor can touch: the gate, the HUD status, the control
+ * dock, presets, the help dialog, toasts, and the custom cursor. It knows
+ * nothing about WebGL; the app calls back into the stage through the handlers
+ * passed to `createShell`.
+ */
+
+const ICONS = {
+  camera:
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h3l1.6-2.1h6.8L17 8.5h3v9.2H4z"/><circle cx="12" cy="13" r="3.1"/></svg>',
+  snapshot:
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h3l1.6-2.1h6.8L17 8.5h3v9.2H4z"/><circle cx="12" cy="13" r="3.1"/><path d="M18.5 5.2v3"/></svg>',
+  sound:
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h3l4-3v10l-4-3H4z"/><path d="M15 9.2a4 4 0 0 1 0 5.6"/><path d="M17.6 6.8a7.6 7.6 0 0 1 0 10.4"/></svg>',
+  muted:
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10h3l4-3v10l-4-3H4z"/><path d="M16 9.5l4.5 5M20.5 9.5L16 14.5"/></svg>',
+  fullscreen:
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg>',
+  exitFullscreen:
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5"/></svg>',
+  help:
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.4"/><path d="M9.6 9.2a2.5 2.5 0 0 1 4.9.7c0 1.7-2.4 2-2.4 3.6"/><path d="M12 17.1h.01"/></svg>',
 };
 
-const THREE = window.THREE;
-if (!THREE) throw new Error('three.min.js must be loaded before the module entry');
+const CAMERA_LABELS = {
+  idle: 'reflection off',
+  requesting: 'asking for reflection',
+  live: 'reflection live',
+  denied: 'reflection blocked',
+  unsupported: 'reflection unavailable',
+  error: 'reflection interrupted',
+};
 
-const PsychPhrases = [
-  "you are the light.",
-  "this is not reflection.",
-  "you pass through.",
-  "identity is refraction.",
-  "only light has no shadow here.",
-  "you were always inside.",
-  "the prism remembers your face.",
+const ACTION_BUTTONS = [
+  { id: 'camera', label: 'Camera', icon: 'camera', toggle: true },
+  { id: 'snapshot', label: 'Snapshot', icon: 'snapshot' },
+  { id: 'sound', label: 'Sound', icon: 'sound', toggle: true },
+  { id: 'fullscreen', label: 'Fullscreen', icon: 'fullscreen', toggle: true },
+  { id: 'help', label: 'Help', icon: 'help' },
 ];
 
-export function createShell({ onModeSelect, onPresetLoad, onCameraReady }) {
-  const state = {
-    camReady: false,
-    mode: 'prism',
-    brightness: 0.5,
-    mouseX: 0,
-    mouseY: 0,
-    tMouseX: 0,
-    tMouseY: 0,
-    ready: false,
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+export function prefersReducedMotion() {
+  return window.matchMedia?.(REDUCED_MOTION_QUERY).matches ?? false;
+}
+
+export function showFatal(message) {
+  const overlay = document.getElementById('fatal');
+  if (!overlay) return;
+  const detail = overlay.querySelector('[data-fatal-message]');
+  if (detail) detail.textContent = message || 'Something went wrong while starting the piece.';
+  overlay.hidden = false;
+  overlay.querySelector('button')?.focus();
+}
+
+export function createShell({ modes, callbacks }) {
+  const dom = {
+    body: document.body,
+    gate: document.getElementById('gate'),
+    allow: document.getElementById('allow'),
+    skip: document.getElementById('skip'),
+    gateMessage: document.getElementById('gate-message'),
+    dock: document.getElementById('dock'),
+    modeGroup: document.getElementById('mode-group'),
+    presetList: document.getElementById('preset-list'),
+    saveLook: document.getElementById('save-look'),
+    actions: document.getElementById('dock-actions'),
+    status: document.getElementById('status'),
+    statusLabel: document.getElementById('status-label'),
+    hud: document.getElementById('hud'),
+    corners: document.getElementById('corners'),
+    psych: document.getElementById('psych'),
+    cursor: document.getElementById('cursor'),
+    cursorRing: document.getElementById('cursor-ring'),
+    toast: document.getElementById('toast'),
+    help: document.getElementById('help'),
+    helpClose: document.getElementById('help-close'),
+    scanlines: document.getElementById('scanlines'),
   };
 
-  // Three.js chrome wordmark scene — created once, owned by shell, farmed to identity.
-  const renderer = new THREE.WebGLRenderer({
-    canvas: DOM.threeCanvas,
-    antialias: true,
-    alpha: true,
-  });
-  renderer.setPixelRatio(1);
-  renderer.setSize(innerWidth, innerHeight);
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.3;
+  const actions = new Map();
+  let toastTimer = 0;
+  let started = false;
+  let reducer = prefersReducedMotion();
+  let pointer = {
+    x: window.innerWidth / 2,
+    y: window.innerHeight / 2,
+    ringX: window.innerWidth / 2,
+    ringY: window.innerHeight / 2,
+    visible: false,
+  };
+  let currentMode = modes[0]?.id ?? 'prism';
 
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(
-    42, innerWidth / innerHeight, 0.1, 100
-  );
-  camera.position.set(0, 0, 5);
-
-  const echoGroup = new THREE.Group();
-  scene.add(echoGroup);
-
-  const pCount = 60;
-  const pPos = new Float32Array(pCount * 3);
-  for (let i = 0; i < pCount; i++) {
-    pPos[i * 3] = (Math.random() - 0.5) * 13;
-    pPos[i * 3 + 1] = (Math.random() - 0.5) * 7;
-    pPos[i * 3 + 2] = (Math.random() - 0.5) * 4 - 1;
-  }
-  const pointsGeo = new THREE.BufferGeometry();
-  pointsGeo.setAttribute(
-    'position',
-    new THREE.BufferAttribute(pPos, 3),
-  );
-  const pointsMat = new THREE.PointsMaterial({
-    color: 0x4fc3f7,
-    size: 0.022,
-    transparent: true,
-    opacity: 0.3,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  scene.add(new THREE.Points(pointsGeo, pointsMat));
-
-  const ambient = new THREE.AmbientLight(0x203040, 0.35);
-  scene.add(ambient);
-  const dir = new THREE.DirectionalLight(0xc0d0e0, 1.4);
-  dir.position.set(3, 4, 5);
-  scene.add(dir);
-  const blue = new THREE.PointLight(0x4fc3f7, 2, 12);
-  blue.position.set(-3, 2, 3);
-  scene.add(blue);
-  const violet = new THREE.PointLight(0xb39ddb, 1.5, 10);
-  violet.position.set(3, -2, 2);
-  scene.add(violet);
-
-  const lights = { ambient, dir, blue, violet };
-
-  let cursorX = 0,
-    cursorY = 0,
-    cursorRx = 0,
-    cursorRy = 0;
-  let psychTimer = null;
-  let rippleTimer = null;
-
-  // Local reference to the shell API object so start() can mutate it.
-  let shellApi = {};
-
-  function bindInput() {
-    window.addEventListener('mousemove', (e) => {
-      cursorX = e.clientX;
-      cursorY = e.clientY;
-      state.tMouseX = (e.clientX / innerWidth) * 2 - 1;
-      state.tMouseY = -(e.clientY / innerHeight) * 2 + 1;
-    });
-
-    window.addEventListener('click', (e) => {
-      const r = document.createElement('div');
-      r.className = 'ripple';
-      r.style.left = e.clientX + 'px';
-      r.style.top = e.clientY + 'px';
-      r.style.width = '40px';
-      r.style.height = '40px';
-      document.body.appendChild(r);
-      if (rippleTimer) clearTimeout(rippleTimer);
-      rippleTimer = setTimeout(() => r.remove(), 750);
-    });
-
-    window.addEventListener('resize', () => {
-      onResize();
-    });
-
-    window.addEventListener('deviceorientation', (e) => {
-      if (e.gamma != null) {
-        state.tMouseX = (e.gamma / 45) * 0.5;
-        state.tMouseY = ((e.beta || 0) - 30) / 45 * 0.3;
-      }
-    });
+  // ── build controls ────────────────────────────────────────────
+  dom.modeGroup.innerHTML = '';
+  for (const mode of modes) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'mode';
+    button.dataset.mode = mode.id;
+    button.setAttribute('aria-pressed', String(mode.id === currentMode));
+    button.innerHTML = `<span class="mode__label">${mode.label}</span>`;
+    button.addEventListener('click', () => callbacks.onSelectMode?.(mode.id));
+    dom.modeGroup.append(button);
   }
 
-  function sizePrism() {
-    const w = Math.floor(innerWidth * 0.72);
-    const h = Math.floor(innerHeight * 0.72);
-    DOM.prismCanvas.width = w;
-    DOM.prismCanvas.height = h;
-    DOM.prismCanvas.style.width = innerWidth + 'px';
-    DOM.prismCanvas.style.height = innerHeight + 'px';
+  dom.actions.innerHTML = '';
+  for (const action of ACTION_BUTTONS) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'icon-btn';
+    button.id = `action-${action.id}`;
+    button.dataset.action = action.id;
+    button.setAttribute('aria-label', action.label);
+    button.title = action.label;
+    if (action.toggle) button.setAttribute('aria-pressed', 'false');
+    button.innerHTML = ICONS[action.icon];
+    button.addEventListener('click', () => callbacks.onAction?.(action.id));
+    dom.actions.append(button);
+    actions.set(action.id, button);
   }
 
-  function onResize() {
-    if (shellApi.onResize) shellApi.onResize();
-    sizePrism();
-    camera.aspect = innerWidth / innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
+  // ── gate ──────────────────────────────────────────────────────
+  function setGateBusy(busy) {
+    dom.allow.disabled = busy;
+    dom.skip.disabled = busy;
+    dom.gate.toggleAttribute('data-busy', busy);
   }
 
-  DOM.allowBtn.addEventListener('click', async () => {
-    if (state.camReady) return;
-    try {
-      await cameraPipeline.requestAccess();
-      state.camReady = true;
-      onCameraReady && onCameraReady();
-    } catch (err) {
-      DOM.gateTitle.textContent = 'reflection denied';
-    }
+  dom.allow.addEventListener('click', () => {
+    if (started) return;
+    setGateBusy(true);
+    setGateMessage('asking your browser for the camera…');
+    callbacks.onEnterCamera?.();
   });
 
-  DOM.modes.querySelectorAll('.mode-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      DOM.modes.querySelectorAll('.mode-btn').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      onModeSelect(btn.dataset.mode);
-    });
+  dom.skip.addEventListener('click', () => {
+    if (started) return;
+    setGateBusy(true);
+    callbacks.onEnterWithoutCamera?.();
   });
 
-  function startCursorLoop() {
-    function tick() {
-      cursorRx += (cursorX - cursorRx) * 0.1;
-      cursorRy += (cursorY - cursorRy) * 0.1;
-      DOM.cursor.style.left = cursorX + 'px';
-      DOM.cursor.style.top = cursorY + 'px';
-      DOM.cursorRing.style.left = cursorRx + 'px';
-      DOM.cursorRing.style.top = cursorRy + 'px';
-      requestAnimationFrame(tick);
+  function setGateMessage(text, tone = 'neutral') {
+    if (!dom.gateMessage) return;
+    dom.gateMessage.textContent = text;
+    dom.gateMessage.dataset.tone = tone;
+  }
+
+  function setGateBusyState(busy) {
+    setGateBusy(busy);
+  }
+
+  // ── presets ───────────────────────────────────────────────────
+  function renderPresets(presets, activeId, isCustom) {
+    dom.presetList.innerHTML = '';
+    for (const preset of presets) {
+      const wrap = document.createElement('div');
+      wrap.className = 'chip-wrap';
+      wrap.dataset.preset = preset.id;
+
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip';
+      chip.dataset.preset = preset.id;
+      chip.setAttribute('aria-pressed', String(preset.id === activeId));
+      chip.textContent = preset.name;
+      chip.addEventListener('click', () => callbacks.onSelectPreset?.(preset.id));
+      wrap.append(chip);
+
+      if (isCustom(preset.id)) {
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'chip__remove';
+        remove.dataset.remove = preset.id;
+        remove.setAttribute('aria-label', `delete ${preset.name}`);
+        remove.title = `delete ${preset.name}`;
+        remove.textContent = '×';
+        remove.addEventListener('click', () => callbacks.onRemoveLook?.(preset.id));
+        wrap.append(remove);
+      }
+
+      dom.presetList.append(wrap);
     }
-    requestAnimationFrame(tick);
   }
 
-  function startPsychLoop() {
-    const el = DOM.psych;
-    let idx = 0;
+  dom.saveLook.addEventListener('click', () => callbacks.onSaveLook?.());
 
-    function next() {
-      const phrase = PsychPhrases[idx++ % PsychPhrases.length];
-      el.textContent = phrase;
-      el.style.color = `rgba(200,215,225,${0.35 + state.brightness * 0.25})`;
-      el.style.textShadow = `0 0 50px rgba(79,195,247,${0.15 + state.brightness * 0.2}),-1px 0 rgba(255,80,80,.15),1px 0 rgba(80,200,255,.15)`;
-      setTimeout(() => {
-        el.style.color = 'rgba(200,215,225,0)';
-        el.style.textShadow = 'none';
-        setTimeout(next, 5500 + Math.random() * 4500);
-      }, 2800);
-    }
-
-    setTimeout(next, 3500);
+  // ── help ──────────────────────────────────────────────────────
+  function openHelp() {
+    if (!dom.help) return;
+    if (typeof dom.help.showModal === 'function') dom.help.showModal();
+    else dom.help.setAttribute('open', '');
+    dom.helpClose?.focus();
   }
 
-  function revealUI() {
-    DOM.gate.classList.add('hide');
-    DOM.modes.classList.add('reveal');
-    DOM.hudLogo.classList.add('reveal');
-    DOM.hudStatus.classList.add('reveal');
-    DOM.corners.forEach((c) => c.classList.add('reveal'));
+  function closeHelp() {
+    if (!dom.help) return;
+    if (typeof dom.help.close === 'function') dom.help.close();
+    else dom.help.removeAttribute('open');
   }
 
-  function setMode(mode) {
-    state.mode = mode;
-    DOM.modes.querySelectorAll('.mode-btn').forEach((b) => {
-      b.classList.toggle('active', b.dataset.mode === mode);
+  dom.helpClose?.addEventListener('click', closeHelp);
+  dom.help?.addEventListener('click', (event) => {
+    if (event.target === dom.help) closeHelp();
+  });
+
+  // ── pointer and cursor ────────────────────────────────────────
+  function updatePointer(event) {
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+    pointer.visible = true;
+    callbacks.onPointerMove?.({
+      x: event.clientX,
+      y: event.clientY,
+      nx: (event.clientX / window.innerWidth) * 2 - 1,
+      ny: -(event.clientY / window.innerHeight) * 2 + 1,
+      pointerType: event.pointerType,
     });
   }
 
-  function setBrightness(b) {
-    state.brightness = Math.min(1, Math.max(0, b));
+  window.addEventListener('pointermove', updatePointer, { passive: true });
+  window.addEventListener('pointerdown', (event) => {
+    updatePointer(event);
+    if (!started || reducer || event.pointerType !== 'mouse') return;
+    const ripple = document.createElement('span');
+    ripple.className = 'ripple';
+    ripple.style.left = `${event.clientX}px`;
+    ripple.style.top = `${event.clientY}px`;
+    dom.body.append(ripple);
+    ripple.addEventListener('animationend', () => ripple.remove(), { once: true });
+  });
+
+  function setCursorEnabled(enabled) {
+    dom.body.classList.toggle('has-custom-cursor', enabled);
   }
 
-  function setMouse(mouseX, mouseY) {
-    state.mouseX = mouseX;
-    state.mouseY = mouseY;
+  function tick(dt) {
+    if (!pointer.visible) return;
+    pointer.ringX += (pointer.x - pointer.ringX) * Math.min(1, dt * 9);
+    pointer.ringY += (pointer.y - pointer.ringY) * Math.min(1, dt * 9);
+    dom.cursor.style.transform = `translate3d(${pointer.x}px, ${pointer.y}px, 0) translate(-50%, -50%)`;
+    dom.cursorRing.style.transform = `translate3d(${pointer.ringX}px, ${pointer.ringY}px, 0) translate(-50%, -50%)`;
   }
 
-  function start({ modes: modeEl, identity, presets, audio, cameraPipeline, onResize: externalResize }) {
-    shellApi.onResize = externalResize;
-    shellApi.cameraPipeline = cameraPipeline;
-    bindInput();
-    sizePrism();
-    startCursorLoop();
+  // ── reveal / status ───────────────────────────────────────────
+  function hideGate() {
+    started = true;
+    dom.gate.classList.add('is-leaving');
+    dom.gate.setAttribute('aria-hidden', 'true');
+    dom.dock.hidden = false;
+    dom.body.classList.add('is-started');
+    window.setTimeout(() => {
+      dom.gate.hidden = true;
+      dom.dock.classList.add('is-visible');
+      dom.hud.classList.add('is-visible');
+      dom.corners.classList.add('is-visible');
+      dom.modeGroup.querySelector('.mode[aria-pressed="true"]')?.focus({ preventScroll: true });
+    }, reducer ? 0 : 700);
+  }
 
-    // preset bootstrap
-    const saved = presets.active();
-    if (saved) {
-      setMode(saved.mode);
-      identity.apply(saved);
-    } else {
-      setMode('prism');
+  function setMode(modeId) {
+    currentMode = modeId;
+    let activeButton = null;
+    dom.modeGroup.querySelectorAll('.mode').forEach((button) => {
+      const active = button.dataset.mode === modeId;
+      button.setAttribute('aria-pressed', String(active));
+      if (active) activeButton = button;
+    });
+    dom.body.dataset.mode = modeId;
+    // Keep keyboard focus on the mode the visitor just chose instead of
+    // leaving a focus ring on the previous one, which reads as a second
+    // selected state.
+    if (activeButton && dom.modeGroup.contains(document.activeElement)) {
+      activeButton.focus({ preventScroll: true });
     }
+  }
 
-    onPresetLoad && onPresetLoad();
+  function setStatus({ camera = 'idle', detail = '' } = {}) {
+    const label = CAMERA_LABELS[camera] ?? CAMERA_LABELS.idle;
+    dom.status.dataset.camera = camera;
+    dom.statusLabel.textContent = detail ? `${label} · ${detail}` : label;
+  }
 
-    // Give identity everything it needs to build the chrome wordmark + live env.
-    identity.attach({
-      renderer,
-      scene,
-      echoGroup,
-      pointsGeo,
-      pointsMat,
-      lights,
-      video: DOM.video,
+  function setActionState(action, { pressed, icon, label } = {}) {
+    const button = actions.get(action);
+    if (!button) return;
+    if (typeof pressed === 'boolean') button.setAttribute('aria-pressed', String(pressed));
+    if (icon && ICONS[icon]) button.innerHTML = ICONS[icon];
+    if (label) {
+      button.setAttribute('aria-label', label);
+      button.title = label;
+    }
+  }
+
+  function setSound(on) {
+    setActionState('sound', {
+      pressed: on,
+      icon: on ? 'sound' : 'muted',
+      label: on ? 'Mute sound' : 'Enable sound',
     });
+  }
 
-    requestAnimationFrame(function loop(now = 0) {
-      requestAnimationFrame(loop);
-
-      const dt = now - shellApi._lastFrame;
-      if (dt < 16) return;
-      shellApi._lastFrame = now;
-
-      state.mouseX += (state.tMouseX - state.mouseX) * 0.055;
-      state.mouseY += (state.tMouseY - state.mouseY) * 0.055;
-
-      const cc = cameraPipeline.sample();
-      if (cc) {
-        // camera sample produced a frame; brightness/ghost updated inside pipeline
-      }
-
-      identity.tick({
-        time: shellApi._time,
-        brightness: state.brightness,
-        mouseX: state.mouseX,
-        mouseY: state.mouseY,
-        mode: state.mode,
-        camReady: state.camReady,
-        echoGroup,
-        pointsGeo,
-        pointsMat,
-      });
-
-      const mode = modeEl.get(state.mode);
-      if (mode && mode.render) {
-        mode.render({
-          time: shellApi._time,
-          brightness: state.brightness,
-          mouseX: state.mouseX,
-          mouseY: state.mouseY,
-          camReady: state.camReady,
-          prismCanvas: DOM.prismCanvas,
-        });
-      }
-
-      setBrightness(cameraPipeline.brightness);
-
-      if (!state.ready && cameraPipeline.ready) {
-        state.ready = true;
-        state.camReady = true;
-        revealUI();
-        startPsychLoop();
-      }
-
-      shellApi._time += 0.008;
-
-      // Render the Three.js chrome wordmark scene.
-      renderer.render(scene, camera);
+  function setFullscreen(on) {
+    setActionState('fullscreen', {
+      pressed: on,
+      icon: on ? 'exitFullscreen' : 'fullscreen',
+      label: on ? 'Exit fullscreen' : 'Fullscreen',
     });
+  }
 
-    shellApi._lastFrame = performance.now();
-    shellApi._time = 0;
+  function setCameraPressed(on) {
+    setActionState('camera', {
+      pressed: on,
+      label: on ? 'Turn camera off' : 'Turn camera on',
+    });
+  }
 
-    return {
-      setState: (patch) => Object.assign(state, patch),
-      state,
-    };
+  function toast(message, { tone = 'info', duration = 2600 } = {}) {
+    if (!dom.toast) return;
+    window.clearTimeout(toastTimer);
+    dom.toast.textContent = message;
+    dom.toast.dataset.tone = tone;
+    dom.toast.classList.add('is-visible');
+    toastTimer = window.setTimeout(() => dom.toast.classList.remove('is-visible'), duration);
+  }
+
+  function showPhrase(text) {
+    dom.psych.textContent = text;
+    dom.psych.classList.add('is-visible');
+  }
+
+  function hidePhrase() {
+    dom.psych.classList.remove('is-visible');
+  }
+
+  function setReducedMotion(value) {
+    reducer = value;
+    dom.body.classList.toggle('is-reduced-motion', value);
+    setCursorEnabled(value ? false : window.matchMedia?.('(pointer: fine)').matches ?? false);
+    if (value) dom.body.classList.add('no-ripple');
+    else dom.body.classList.remove('no-ripple');
+  }
+
+  function setDebug(text) {
+    dom.status.dataset.debug = text ? 'true' : 'false';
+    if (text) dom.statusLabel.textContent = text;
   }
 
   return {
-    start,
+    hideGate,
+    setGateMessage,
+    setGateBusy: setGateBusyState,
+    renderPresets,
     setMode,
-    DOM,
+    setStatus,
+    setSound,
+    setFullscreen,
+    setCameraPressed,
+    setActionState,
+    toast,
+    showPhrase,
+    hidePhrase,
+    setReducedMotion,
+    setCursorEnabled,
+    setDebug,
+    openHelp,
+    closeHelp,
+    tick,
+    isHelpOpen: () => Boolean(dom.help?.open),
+    get started() {
+      return started;
+    },
+    get reducedMotion() {
+      return reducer;
+    },
+    dom,
   };
 }
