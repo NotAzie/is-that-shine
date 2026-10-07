@@ -20,7 +20,10 @@ const DOM = {
 };
 
 const THREE = window.THREE;
-if (!THREE) throw new Error('three.min.js must be loaded before the module entry');
+if (!THREE) {
+  document.getElementById('gate-title').textContent = 'three.js missing';
+  throw new Error('three.min.js must be loaded before the module entry');
+}
 
 const PsychPhrases = [
   "you are the light.",
@@ -106,6 +109,8 @@ export function createShell({ onModeSelect, onPresetLoad, onCameraReady }) {
     cursorRy = 0;
   let psychTimer = null;
   let rippleTimer = null;
+  let psychRAF = 0;
+  let psychRunning = false;
 
   // Local reference to the shell API object so start() can mutate it.
   let shellApi = {};
@@ -178,6 +183,8 @@ export function createShell({ onModeSelect, onPresetLoad, onCameraReady }) {
     });
   });
 
+  let cursorLoopRAF = 0;
+
   function startCursorLoop() {
     function tick() {
       cursorRx += (cursorX - cursorRx) * 0.1;
@@ -186,9 +193,16 @@ export function createShell({ onModeSelect, onPresetLoad, onCameraReady }) {
       DOM.cursor.style.top = cursorY + 'px';
       DOM.cursorRing.style.left = cursorRx + 'px';
       DOM.cursorRing.style.top = cursorRy + 'px';
-      requestAnimationFrame(tick);
+      cursorLoopRAF = requestAnimationFrame(tick);
     }
-    requestAnimationFrame(tick);
+    cursorLoopRAF = requestAnimationFrame(tick);
+  }
+
+  function stopCursorLoop() {
+    if (cursorLoopRAF) {
+      cancelAnimationFrame(cursorLoopRAF);
+      cursorLoopRAF = 0;
+    }
   }
 
   function startPsychLoop() {
@@ -288,6 +302,7 @@ export function createShell({ onModeSelect, onPresetLoad, onCameraReady }) {
         echoGroup,
         pointsGeo,
         pointsMat,
+        video,
       });
 
       const mode = modeEl.get(state.mode);
@@ -326,9 +341,23 @@ export function createShell({ onModeSelect, onPresetLoad, onCameraReady }) {
     };
   }
 
+  function destroy() {
+    identity && identity.detach && identity.detach();
+    audio && audio.dispose && audio.dispose();
+    cameraPipeline && cameraPipeline.teardown && cameraPipeline.teardown();
+    if (renderer && renderer.dispose) {
+      try { renderer.dispose(); } catch (e) { /* ignore */ }
+    }
+    stopCursorLoop();
+    state.ready = false;
+    state.camReady = false;
+  }
+
   return {
     start,
     setMode,
+    destroy,
+    getState: () => state,
     DOM,
   };
 }

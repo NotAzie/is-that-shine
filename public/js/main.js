@@ -7,6 +7,18 @@ import { createAudio } from './audio.js';
 
 let shellApi = null;
 
+function dispose() {
+  if (shellApi && shellApi.destroy) {
+    shellApi.destroy();
+  }
+  shellApi = null;
+}
+
+if (typeof window !== 'undefined') {
+  window.echoDispose = dispose;
+}
+
+export { dispose };
 export function run() {
   const presets = createPresets();
   const audio = createAudio();

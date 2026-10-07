@@ -16,7 +16,7 @@ const DefaultPresets = [
     mode: 'prism',
     brightness: 0.25,
     colorResponse: 'rainbow',
-    ghost: 0.5,
+    ghost: 0.25,
   },
   {
     id: 'fracture',
@@ -87,7 +87,7 @@ export function createPresets() {
         mode: mode,
         brightness: 0.5,
         colorResponse: 'auto',
-        ghost: 0.5,
+        ghost: 0.35,
       };
       presets.push(preset);
       saveJSON(PRESET_KEY, presets);

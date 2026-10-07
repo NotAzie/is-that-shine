@@ -9,12 +9,14 @@ export function createIdentity({ onModeChange }) {
   let dir = null;
   let blue = null;
   let violet = null;
+  const VID_ENV_REFRESH_INTERVAL = 30;
+  let envCounter = 0;
   let pmg = null;
   let liveEnv = null;
   let vidTex = null;
-  let envCounter = 0;
   let fbEnv = null;
   let echoMesh = null;
+  let video = null;
 
   function setMode(newMode) {
     if (newMode === mode) return;
@@ -42,8 +44,7 @@ export function createIdentity({ onModeChange }) {
     ambient = lights.ambient;
     dir = lights.dir;
     blue = lights.blue;
-    violet = lights.violet;
-    video = v;
+    violet = lights.violet;      video = v;
     // Defer environment map creation until the renderer is usable.
     try {
       fbEnv = makeFbEnv();
@@ -51,6 +52,7 @@ export function createIdentity({ onModeChange }) {
       // Renderer may not support PMREM on first allocation; fall back to a neutral env.
       try { fbEnv = makeFallbackEnv(); } catch (e2) { fbEnv = null; }
     }
+    this._video = video;
   }
 
   function makeFallbackEnv() {
@@ -198,7 +200,14 @@ export function createIdentity({ onModeChange }) {
       echoGroup,
       pointsGeo,
       pointsMat,
+      video,
     } = opts;
+
+    if (video !== undefined) {
+      if (video !== this._video) {
+        this._video = video;
+      }
+    }
 
     if (!echoGroup) return;
 
@@ -234,13 +243,11 @@ export function createIdentity({ onModeChange }) {
     // Rate-limited live camera environment map for the chrome wordmark.
     if (camReady && renderer && video) {
       envCounter++;
-      if (envCounter % 30 === 0) {
+      if (envCounter % VID_ENV_REFRESH_INTERVAL === 0) {
         buildLiveEnv();
       }
     }
-  }
-
-  function buildLiveEnv() {
+  }  function buildLiveEnv() {
     if (!renderer || !video) return;
     if (!vidTex) {
       vidTex = new THREE.VideoTexture(video);
@@ -265,10 +272,41 @@ export function createIdentity({ onModeChange }) {
     }
   }
 
-  return {
+  function dispose() {
+    if (liveEnv) {
+      liveEnv.dispose && liveEnv.dispose();
+      liveEnv = null;
+    }
+    if (vidTex) {
+      vidTex.dispose && vidTex.dispose();
+      vidTex = null;
+    }
+    if (pmg) {
+      pmg.dispose && pmg.dispose();
+      pmg = null;
+    }
+    renderer = null;
+    scene = null;
+    echoGroup = null;
+    video = null;
+    chromeMat = null;
+    echoMesh = null;
+    fbEnv = null;
+    envCounter = 0;
+  }
+    function detach() {
+      if (echoMesh) {
+        echoGroup && echoGroup.remove(echoMesh);
+      }
+      dispose();
+    }
+
+    return {
     setMode,
     apply,
     attach,
+    detach,
+    dispose,
     tuneChrome,
     tick,
     get mode() {
@@ -276,3 +314,4 @@ export function createIdentity({ onModeChange }) {
     },
   };
 }
+

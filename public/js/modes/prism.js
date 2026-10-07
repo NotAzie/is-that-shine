@@ -60,5 +60,5 @@ function prismRender(opts) {
 }
 
 // keep old import path working during transition
-export { SHARED_VERT, SHARED_FRAG };
-export { createSharedPrismState };
+// eslint-disable-next-line no-unused-vars
+const _sharedPrism = createSharedPrismState;

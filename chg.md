@@ -1,10 +1,10 @@
 # Project Card
 
-**Category:** Frontend / Experiment
+**Category:** Frontend / WebGL Art
 
-**What this project is:** A lightweight HTML visual effect or webpage experiment.
+**What this project is:** A live webcam-driven WebGL art piece with three reflection modes and a reusable platform shell.
 
-**Current Status:** Small prototype
+**Current Status:** Released
 
-**Judgment:** Needs Work
-Why: The concept is not bad, but the folder name reads like a mood and not like a project.
+**Judgment:** Good
+Why: The piece has a clear identity (reflection becomes itself once you stand in front of it), a coherent module layout, and a static deploy story. The folder name `is-that-shine` is an archive slug; the artifact itself is `echo.us — prism mode`.

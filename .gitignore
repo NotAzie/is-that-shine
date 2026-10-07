@@ -21,3 +21,19 @@ RELEASE_REPORT.md
 AUDIT_DECISION.md
 
 # local run scripts and planning docs are kept in-tree for this release
+
+# IDE / OS
+.vscode/
+.idea/
+*.sublime-*
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# local server helper is not shipped
+public/run_server.py
+
+# temporary verification outputs
+smoke_server.log
+smoke_server.pid

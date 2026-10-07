@@ -101,8 +101,15 @@ The piece stays live and responsive first:
 - texture uploads and expensive environment refreshes are rate-limited
 - resize, device orientation, and pointer/touch input are handled deliberately
 - frame pacing is explicit in the main loop
+- audio and camera subsystems expose `dispose` / `teardown` so the page can release media, audio context, WebGL resources, and animation loops when the piece is torn down or re-initialized
+- camera video tracks are stopped explicitly on teardown instead of left running
 
 The original prototype already used a throttled `PMREMGenerator` path for live camera environment lighting. The platform keeps that kind of rate-limited refresh explicit and optional so the experience can scale between a light camera overlay and a heavier live-reflection path depending on device capability.
+
+Reinitialization notes
+
+- The entry module now exposes `run()` and `dispose()`. The page wraps `run()` in a `try/catch` so module load failures are reported on the console instead of failing silently.
+- If you call `run()` more than once during a session, call `dispose()` first so audio, camera, WebGL, and animation loops do not leak.
 
 ## identity
 

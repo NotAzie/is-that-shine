@@ -1,5 +1,8 @@
 import { createSharedPrismState } from './shared_shader.js';
 
+// ensure shared shader is wired into this module (used by prismRender)
+const _sharedPrism = createSharedPrismState;
+
 export function makeVoidPass() {
   return {
     name: 'void',
@@ -10,6 +13,7 @@ export function makeVoidPass() {
 }
 
 function prismRender(opts, modeIndex) {
+
   const {
     time,
     brightness,

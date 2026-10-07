@@ -235,8 +235,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
 <script type="module">
-import { run } from './js/main.js';
-run();
+try {
+  import { run } from './js/main.js';
+  run();
+} catch (err) {
+  console.error('echo.us failed to initialize:', err);
+}
 </script>
 </body>
 </html>
