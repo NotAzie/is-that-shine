@@ -12,22 +12,12 @@ Thumbs.db
 .vscode/*
 .idea/*
 *.sublime-*
-coverage/
-.nyc_output/
-dist/
-build/
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.webp
-*.mp4
-*.webm
-*.wav
-*.mp3
-*.ogg
-*.ttf
-*.woff
-*.woff2
-*.otf
-*.eot
+
+# generated deploy artifact placeholder
+public/icons/icon-192.png
+
+# release-audit scaffolding (not shipped)
+RELEASE_REPORT.md
+AUDIT_DECISION.md
+
+# local run scripts and planning docs are kept in-tree for this release

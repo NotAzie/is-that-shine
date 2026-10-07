@@ -1,0 +1,13 @@
+{
+  "name": "is-that-shine",
+  "version": "0.1.0",
+  "description": "echo.us — prism mode: a live WebGL art piece lit by your reflection.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python -m http.server 8000 --directory public",
+    "dev": "python -m http.server 8000 --directory public",
+    "verify": "python scripts/verify_build.py"
+  },
+  "devDependencies": {}
+}

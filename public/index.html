@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>echo.us — prism mode</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=Space+Mono&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #02030a;
+    font-family: 'Space Mono', monospace;
+    cursor: none;
+  }
+
+  #prism-canvas {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+    image-rendering: optimizeSpeed;
+  }
+
+  #three-canvas {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  #cam-video { display: none; }
+
+  #cursor {
+    position: fixed; width: 6px; height: 6px;
+    background: #80deea; border-radius: 50%;
+    pointer-events: none; z-index: 9999;
+    transform: translate(-50%,-50%);
+    box-shadow: 0 0 10px #80deea, 0 0 20px #80deea;
+    mix-blend-mode: screen;
+  }
+  #cursor-ring {
+    position: fixed; width: 28px; height: 28px;
+    border: 1px solid rgba(79,195,247,0.35); border-radius: 50%;
+    pointer-events: none; z-index: 9998;
+    transform: translate(-50%,-50%);
+    transition: width .35s ease, height .35s ease;
+  }
+
+  #vignette {
+    position: fixed; inset: 0; z-index: 2; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 50%,
+      transparent 25%, rgba(2,3,10,.55) 70%, rgba(2,3,10,.92) 100%);
+  }
+
+  #scanlines {
+    position: fixed; inset: 0; z-index: 8; pointer-events: none;
+    background: repeating-linear-gradient(0deg,
+      transparent, transparent 2px, rgba(0,0,0,.028) 2px, rgba(0,0,0,.028) 4px);
+  }
+
+  #gate {
+    position: fixed; inset: 0; z-index: 30;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 36px;
+    transition: opacity 1.8s ease;
+  }
+  #gate-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(11px, 1.4vw, 15px);
+    font-weight: 300; letter-spacing: .55em;
+    color: rgba(200,210,220,.35);
+    text-transform: uppercase;
+  }
+  #gate-sub {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic; font-size: clamp(28px, 5vw, 52px);
+    font-weight: 300; letter-spacing: .12em;
+    color: rgba(230,235,240,.7);
+    text-shadow: 0 0 60px rgba(79,195,247,.2);
+  }
+
+  .glass-btn {
+    position: relative;
+    padding: 13px 44px;
+    background: linear-gradient(135deg,
+      rgba(255,255,255,.06) 0%, rgba(180,195,210,.1) 50%, rgba(255,255,255,.04) 100%);
+    border: 1px solid rgba(200,210,220,.2);
+    border-radius: 2px; color: rgba(220,228,235,.8);
+    font-family: 'Space Mono', monospace; font-size: 10px;
+    letter-spacing: .38em; text-transform: uppercase;
+    cursor: none; pointer-events: all; overflow: hidden;
+    backdrop-filter: blur(10px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.07),
+                0 4px 20px rgba(0,0,0,.35);
+    transition: border-color .4s, box-shadow .4s, color .3s;
+  }
+  .glass-btn::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(79,195,247,.12), transparent);
+    transform: translateX(-100%); transition: transform .55s ease;
+  }
+  .glass-btn:hover::before { transform: translateX(100%); }
+  .glass-btn:hover {
+    border-color: rgba(79,195,247,.5);
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.1),
+                0 0 18px rgba(79,195,247,.2), 0 0 50px rgba(79,195,247,.07),
+                0 6px 28px rgba(0,0,0,.45);
+    text-shadow: -1px 0 rgba(255,80,80,.25), 1px 0 rgba(80,200,255,.25);
+  }
+  .glass-btn:active { transform: scale(.98); }
+
+  #modes {
+    position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px; z-index: 20;
+    opacity: 0; transition: opacity 1s ease;
+  }
+  .mode-btn {
+    padding: 7px 18px;
+    background: rgba(8,10,16,.65);
+    border: 1px solid rgba(200,210,220,.12);
+    border-radius: 2px; color: rgba(200,210,220,.38);
+    font-family: 'Space Mono', monospace; font-size: 8px;
+    letter-spacing: .28em; text-transform: uppercase;
+    cursor: none; backdrop-filter: blur(14px);
+    transition: all .3s;
+  }
+  .mode-btn:hover, .mode-btn.active {
+    border-color: rgba(79,195,247,.38);
+    color: #80deea;
+    box-shadow: 0 0 10px rgba(79,195,247,.12);
+    text-shadow: -1px 0 rgba(255,80,80,.2), 1px 0 rgba(80,200,255,.2);
+  }
+
+  #hud-logo {
+    position: fixed; top: 26px; left: 28px; z-index: 20;
+    font-family: 'Cormorant Garamond', serif; font-weight: 300;
+    font-size: 12px; letter-spacing: .5em; text-transform: uppercase;
+    color: rgba(200,210,220,.2); opacity: 0; transition: opacity 1.5s;
+  }
+  #hud-status {
+    position: fixed; top: 26px; right: 28px; z-index: 20;
+    display: flex; align-items: center; gap: 8px;
+    opacity: 0; transition: opacity 1s;
+  }
+  #hud-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: #80deea; box-shadow: 0 0 7px #80deea;
+    animation: blink 2.5s infinite;
+  }
+  #hud-label {
+    font-size: 8px; letter-spacing: .3em;
+    color: rgba(200,210,220,.32); text-transform: uppercase;
+  }
+  @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+
+  .corner {
+    position: fixed; width: 36px; height: 36px; z-index: 20;
+    opacity: 0; transition: opacity 1.5s;
+  }
+  .corner::before, .corner::after {
+    content:''; position: absolute; background: rgba(79,195,247,.3);
+  }
+  .corner::before { width:100%; height:1px; }
+  .corner::after  { width:1px; height:100%; }
+  .corner.tl{top:18px;left:18px}    .corner.tl::before{top:0;left:0}   .corner.tl::after{top:0;left:0}
+  .corner.tr{top:18px;right:18px}   .corner.tr::before{top:0;right:0}  .corner.tr::after{top:0;right:0}
+  .corner.bl{bottom:18px;left:18px} .corner.bl::before{bottom:0;left:0}.corner.bl::after{bottom:0;left:0}
+  .corner.br{bottom:18px;right:18px}.corner.br::before{bottom:0;right:0}.corner.br::after{bottom:0;right:0}
+
+  #psych {
+    position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 22; pointer-events: none;
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic; font-weight: 300;
+    font-size: clamp(12px, 1.6vw, 16px);
+    letter-spacing: .28em; color: rgba(200,210,220,0);
+    text-align: center; text-transform: lowercase;
+    transition: color .6s ease, text-shadow .6s ease;
+  }
+
+  .ripple {
+    position: fixed; border-radius: 50%;
+    border: 1px solid rgba(79,195,247,.3);
+    pointer-events: none; z-index: 7;
+    transform: translate(-50%,-50%) scale(0);
+    animation: ripple-out .7s ease-out forwards;
+  }
+  @keyframes ripple-out { to { transform: translate(-50%,-50%) scale(3.5); opacity: 0; } }
+
+  .reveal { opacity: 1 !important; }
+  .hide   { opacity: 0 !important; pointer-events: none !important; transition: opacity 1.6s ease !important; }
+</style>
+</head>
+<body>
+
+<div id="cursor"></div>
+<div id="cursor-ring"></div>
+<video id="cam-video" autoplay playsinline muted></video>
+
+<canvas id="prism-canvas"></canvas>
+<canvas id="three-canvas"></canvas>
+
+<div id="vignette"></div>
+<div id="scanlines"></div>
+
+<div class="corner tl"></div>
+<div class="corner tr"></div>
+<div class="corner bl"></div>
+<div class="corner br"></div>
+
+<div id="gate">
+  <div id="gate-title">echo.us — prism mode</div>
+  <div id="gate-sub">become the light</div>
+  <button class="glass-btn" id="allow-btn">allow reflection</button>
+</div>
+
+<div id="hud-logo">echo.us</div>
+<div id="hud-status"><div id="hud-dot"></div><div id="hud-label">refracting</div></div>
+<div id="psych"></div>
+
+<div id="modes">
+  <button class="mode-btn active" data-mode="prism">Prism</button>
+  <button class="mode-btn" data-mode="fracture">Fracture</button>
+  <button class="mode-btn" data-mode="void">Void</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script type="module">
+import { run } from './js/main.js';
+run();
+</script>
+</body>
+</html>
