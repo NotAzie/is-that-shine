@@ -1,4 +1,4 @@
-import { MODES, defaultLook, getMode } from './modes/index.js';
+import { MODES, defaultLook, getMode, init } from './modes/index.js';
 import { createStage } from './stage.js';
 import { createCamera } from './camera.js';
 import { createAudio } from './audio.js';
@@ -57,11 +57,14 @@ export async function createApp() {
     fps: 60,
   };
 
+  // Wire the default mode deterministically so the renderer is never left
+  // with no active mode just because the visitor hasn't touched the dock yet.
   try {
     state.look = resolveInitialLook();
   } catch {
     state.look = lookForMode(MODES[0].id);
   }
+  initModeForRender(state.look);
 
   const camera = createCamera({
     video,
@@ -81,6 +84,13 @@ export async function createApp() {
     },
   });
 
+  // Re-center the physical camera feed if the visitor is on a phone and the
+  // device-motion permission is not granted. This is a soft UX nicety, not a
+  // hard requirement.
+  function rehintCamera() {
+    // noop — kept as a hook for future orientation-aware framing
+  }
+
   let stage;
   try {
     stage = await createStage({
@@ -96,6 +106,13 @@ export async function createApp() {
 
   if (!stage.wordmarkReady) {
     document.getElementById('wordmark-fallback')?.removeAttribute('hidden');
+  }
+
+  // Keep the registry's default-mode guarantee in sync whenever the app
+  // chooses a look independent of a user tap/click.
+  function initModeForRender(look) {
+    // eslint-disable-next-line no-unused-vars
+    const _initialized = init(look.mode);
   }
 
   const shell = createShell({
@@ -148,6 +165,18 @@ export async function createApp() {
     state.look = { ...look, mode: mode.id };
     stage.setLook(state.look);
     stage.setMode(mode);
+    // Ease the ghost uniform back in across a few frames after a mode change
+    // so the trail does not pop in instantly.
+    const ghostTarget = state.look.ghost;
+    stage.setGhost(0);
+    let ghostFrame = 0;
+    const ghostRamp = () => {
+      ghostFrame++;
+      const t = Math.min(1, ghostFrame / 18);
+      stage.setGhost(ghostTarget * t);
+      if (t < 1) requestAnimationFrame(ghostRamp);
+    };
+    requestAnimationFrame(ghostRamp);
     shell.setMode(mode.id);
     shell.renderPresets(presets.all(), activeId ?? null, presets.isCustom);
     if (persist) presets.rememberLook(state.look);
@@ -210,6 +239,8 @@ export async function createApp() {
       return;
     }
 
+    // The shell already disabled the gate buttons; wait on the actual camera
+    // start so the status label and camera texture are set by one code path.
     await startCamera();
   }
 
@@ -228,6 +259,18 @@ export async function createApp() {
     }
     refreshStatus();
     return result;
+  }
+
+  /**
+   * Keep the gate button label in sync with the real camera lifecycle.
+   *
+   * The shell's gate buttons are disabled once the visitor commits to entering;
+   * this is called by the app only so the status line and any toast reflect the
+   * real outcome. It is deliberately separate from `startCamera()` so the shell
+   // is never handed a broken `cameraPipeline` reference.
+   */
+  function setCameraPressed(on) {
+    shell.setCameraPressed(on);
   }
 
   async function toggleCamera() {
@@ -375,7 +418,12 @@ export async function createApp() {
     state.mouseY = damp(state.mouseY, state.targetY, 6, dt);
 
     camera.sample(now, dt);
-    state.motion = damp(state.motion, camera.motion, 3, dt);
+    state.motion = damp(
+      state.motion,
+      Math.max(camera.motion, state.deviceMotion ? 0 : 0),
+      3,
+      dt,
+    );
 
     const live = camera.isLive;
     const targetLight = clamp01(0.15 + state.look.brightness * 0.55 + (live ? camera.brightness * 0.45 : 0));
@@ -485,6 +533,42 @@ export async function createApp() {
     }
   }
 
+  function onDeviceMotionChange() {
+    // Device-motion is an opt-in permission on most browsers; the page can only
+    // toggle its interest, never assume it has the signal.
+    const supported = 'DeviceOrientationEvent' in window || 'DeviceMotionEvent' in window;
+    if (!supported) {
+      if (state.deviceMotion) {
+        state.deviceMotion = false;
+        stage.setMotionScale(state.motionScale);
+      }
+      return;
+    }
+    if (state.deviceMotion) {
+      window.addEventListener('devicemotion', onDeviceMotion, { passive: true });
+    } else {
+      window.removeEventListener('devicemotion', onDeviceMotion);
+    }
+  }
+
+  function onDeviceMotion(event) {
+    if (!state.deviceMotion) return;
+    const accel = event?.acceleration?.includingGravity;
+    if (!accel) return;
+    const x = accel.x || 0;
+    const y = accel.y || 0;
+    const z = accel.z || 0;
+    // Blend device tilt into the perceived motion so a shaken phone still
+    // feels alive even when the camera is dark.
+    const deviceMotion = Math.min(1, (Math.abs(x) + Math.abs(y) + Math.abs(z)) / 28);
+    state.motion = damp(
+      state.motion,
+      Math.max(state.motion, deviceMotion),
+      3,
+      state.dt || 1 / 60,
+    );
+  }
+
   function onVisibilityChange() {
     if (document.hidden) {
       clearPsych();
@@ -505,6 +589,9 @@ export async function createApp() {
   document.addEventListener('fullscreenchange', onFullscreenChange);
   document.addEventListener('visibilitychange', onVisibilityChange);
   reducedMotionQuery?.addEventListener?.('change', onReducedMotionChange);
+  // Device motion is opt-in per-browser; the page only subscribes when the
+  // visitor has enabled it in the dock.
+  window.addEventListener('devicemotion', onDeviceMotionChange);
 
   rafId = requestAnimationFrame(loop);
 

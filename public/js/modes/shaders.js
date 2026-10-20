@@ -10,6 +10,8 @@ export const SCENE_VERTEX = /* glsl */ `
 varying vec2 vUv;
 
 void main() {
+  // Pass the full quad UV through verbatim so the fragment shader always sees
+  // 0..1 regardless of the underlying geometry transform.
   vUv = uv;
   gl_Position = vec4(position.xy, 0.0, 1.0);
 }
@@ -157,10 +159,14 @@ vec3 environment(vec3 dir) {
 
 vec3 cameraColor(vec2 uv, float aberration) {
   if (uHasCam < 0.5) return vec3(0.0);
-  vec2 s = clamp(uv, 0.004, 0.996);
-  float r = texture2D(uCam, s + vec2(aberration, 0.0)).r;
-  float g = texture2D(uCam, s).g;
-  float b = texture2D(uCam, s - vec2(aberration, 0.0)).b;
+  // Clamp chromatic-aberration UV offsets so the sampled colour never reads as
+  // a smeared edge when the refracted ray lands outside the camera frame.
+  vec2 s = clamp(uv + vec2(aberration, 0.0), 0.004, 0.996);
+  float r = texture(uCam, s).r;
+  s = clamp(uv, 0.004, 0.996);
+  float g = texture(uCam, s).g;
+  s = clamp(uv - vec2(aberration, 0.0), 0.004, 0.996);
+  float b = texture(uCam, s).b;
   return vec3(r, g, b);
 }
 
@@ -288,9 +294,18 @@ void main() {
 
   col += (hash(gl_FragCoord.xy + floor(uTime * 24.0)) - 0.5) * 0.035 * uGrain;
 
-  gl_FragColor = vec4(max(col, 0.0), 1.0);
+  // Clamp before tone mapping so the tonemapping/colorspace passes never see
+  // NaN from an undefined refract/reflect. Only the final colour is kept.
+  col = max(col, 0.0);
+  gl_FragColor = vec4(col, 1.0);
 
+  // Three.js built-in passes: keep gamma/color-space handling but only when the
+  // shader compiler recognises the built-ins. A raw `#include` spliced into an
+  // ES module string is not guaranteed to match the runtime build, so wrap it
+  // so a mismatch is a no-op instead of a compile failure.
+  #if __VERSION__ >= 300
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
+  #endif
 }
 `;

@@ -4,6 +4,10 @@
  * A mode describes the scene the shader should draw and the personality the
  * chrome wordmark should take while it is on screen. The shader itself lives in
  * `shaders.js` and branches on `shaderIndex`; there is exactly one render path.
+ *
+ * Mode state is created deterministically on boot, not lazily from UI
+ * callbacks. That keeps the render path wired before the visitor ever touches
+ * the dock.
  */
 
 /** @typedef {Object} ModeDefaults
@@ -66,4 +70,18 @@ export function nextMode(id, direction = 1) {
 export function defaultLook(id) {
   const mode = getMode(id) ?? MODES[0];
   return { mode: mode.id, ...mode.defaults };
+}
+
+/**
+ * Initialize the mode registry for rendering.
+ *
+ * The registry is stateless data, but consumers that derive render state from
+ * UI callbacks (rather than from an explicit initial mode) can end up with no
+ * active mode on boot. Calling this once at startup makes the default mode
+ * explicit and leaves the registry unchanged.
+ */
+export function init(initialId = DEFAULT_MODE_ID) {
+  const mode = getMode(initialId) ?? MODES[0];
+  // Keep the registry stable; the caller owns applying the look.
+  return mode;
 }

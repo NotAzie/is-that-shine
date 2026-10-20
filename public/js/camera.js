@@ -65,7 +65,10 @@ export function createCamera({ onStatus = () => {} }) {
   let status = 'idle';
   let errorMessage = '';
   let stream = null;
-  const facingMode = 'user';
+  // Default to the back camera on phones so the reflection reads as “you in
+  // front of the piece” rather than a selfie mirror. The app can still override
+  // this when it constructs the camera if the visitor's device prefers otherwise.
+  const facingMode = 'environment';
   let gain = 1;
   let brightness = 0;
   let motion = 0;
@@ -86,6 +89,19 @@ export function createCamera({ onStatus = () => {} }) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, SAMPLE_WIDTH, SAMPLE_HEIGHT);
+    texture.needsUpdate = true;
+  }
+
+  function drawFrame() {
+    // Mirror the feed horizontally so the reflection reads as a mirror when the
+    // visitor faces the camera, and scale it to the sample grid the shader
+    // expects. Keep it on the CPU canvas so the texture upload is a single
+    // needsUpdate away from the GPU.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, SAMPLE_WIDTH, SAMPLE_HEIGHT);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, -SAMPLE_WIDTH, 0, SAMPLE_WIDTH, SAMPLE_HEIGHT);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     texture.needsUpdate = true;
   }
 

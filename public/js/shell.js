@@ -134,14 +134,21 @@ export function createShell({ modes, callbacks }) {
     if (started) return;
     setGateBusy(true);
     setGateMessage('asking your browser for the camera…');
+    // The app owns the real camera lifecycle; the shell only hands the
+    // visitor's choice back to it.
     callbacks.onEnterCamera?.();
   });
 
   dom.skip.addEventListener('click', () => {
     if (started) return;
     setGateBusy(true);
+    // The app owns the real camera lifecycle; the shell only hands the
+    // visitor's choice back to it.
     callbacks.onEnterWithoutCamera?.();
   });
+
+  dom.gateMessage.setAttribute('data-tone', 'neutral');
+  dom.gateMessage.textContent = 'no recording · no upload · no account';
 
   function setGateMessage(text, tone = 'neutral') {
     if (!dom.gateMessage) return;
