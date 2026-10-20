@@ -1,23 +1,24 @@
+# dependencies
 node_modules/
-.env*
+
+# local environment and secrets
+.env
 .env.*
 !.env.example
+*.pem
+*.key
+
+# logs and editor/OS noise
 *.log
-*.bak
-*.tmp
 .DS_Store
 Thumbs.db
 *.swp
 *~
-.vscode/*
-.idea/*
-*.sublime-*
+.vscode/
+.idea/
 
-# generated deploy artifact placeholder
-public/icons/icon-192.png
-
-# release-audit scaffolding (not shipped)
-RELEASE_REPORT.md
-AUDIT_DECISION.md
-
-# local run scripts and planning docs are kept in-tree for this release
+# generated test/coverage output
+coverage/
+test-results/
+*.tmp
+*.bak
