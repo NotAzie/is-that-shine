@@ -81,7 +81,7 @@ const server = createServer((request, response) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`echo.us dev server → http://${HOST}:${PORT}/`);
+  console.log(`echo.us dev server -> http://${HOST}:${PORT}/`);
   console.log(`serving ${ROOT}`);
 });
 

@@ -34,6 +34,7 @@ export async function createStage({ canvas, onContextLost = () => {} }) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.08;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.useLegacyLights = false;
 
   const uniforms = {
     uTime: { value: 0 },
@@ -74,7 +75,8 @@ export async function createStage({ canvas, onContextLost = () => {} }) {
   let lastState = null;
 
   function currentDpr() {
-    const device = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    const device =
+      typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
     return clamp(device, 1, 2) * density;
   }
 
@@ -86,6 +88,9 @@ export async function createStage({ canvas, onContextLost = () => {} }) {
     renderer.setSize(width, height, false);
     uniforms.uRes.value.set(width * dpr, height * dpr);
     identity.layout(width / height);
+    if (camera.texture) {
+      camera.texture.needsUpdate = true;
+    }
   }
 
   function setDensity(next) {
@@ -93,6 +98,10 @@ export async function createStage({ canvas, onContextLost = () => {} }) {
     if (Math.abs(clamped - density) < 0.001) return;
     density = clamped;
     resize();
+  }
+
+  function setMotionScale(scale) {
+    uniforms.uMotion.value = clamp(scale, 0.15, 1);
   }
 
   function setQuality(next) {
@@ -111,9 +120,10 @@ export async function createStage({ canvas, onContextLost = () => {} }) {
   }
 
   function setLook(look) {
-    uniforms.uGhost.value = look.ghost;
-    uniforms.uRefract.value = look.refraction;
-    uniforms.uGrain.value = look.grain;
+    if (!look) return;
+    uniforms.uGhost.value = look.ghost ?? uniforms.uGhost.value;
+    uniforms.uRefract.value = look.refraction ?? uniforms.uRefract.value;
+    uniforms.uGrain.value = look.grain ?? uniforms.uGrain.value;
   }
 
   function setCameraTexture(texture) {
@@ -122,9 +132,41 @@ export async function createStage({ canvas, onContextLost = () => {} }) {
     identity.setCameraTexture(texture);
   }
 
-  function setMotionScale(scale) {
-    uniforms.uMotion.value = clamp(scale, 0.15, 1);
+  /**
+   * Apply a preset look to the stage uniforms.
+   *
+   * Called by the app when a preset is selected or a saved look is restored.
+   * Kept on the stage so the render path owns the tunables it draws.
+   */
+  function applyLook(look) {
+    if (!look) return;
+    uniforms.uGhost.value = look.ghost ?? uniforms.uGhost.value;
+    uniforms.uRefract.value = look.refraction ?? uniforms.uRefract.value;
+    uniforms.uGrain.value = look.grain ?? uniforms.uGrain.value;
   }
+
+  /**
+   * Called by the app after a mode switch so the ghost-trail uniform eases in
+   * instead of snapping. Kept here so the shader's `uGhost` only changes through
+   * the stage's own damping path.
+   */
+  function setGhost(ghost) {
+    uniforms.uGhost.value = ghost ?? uniforms.uGhost.value;
+  }
+
+  /**
+   * Called by the app on the first real frame to opportunistically rebuild the
+   * wordmark if the font landed late. The actual retry is scheduled inside
+   * `render()` so the stage is not blocked on the font promise during setup.
+   */
+  const _tryRebuildWordmark = () => {
+    if (identity.hasWordmark) return;
+    try {
+      identity.ready.then(() => {}).catch(() => {});
+    } catch {
+      /* leave the CSS fallback in place */
+    }
+  };
 
   function render(state) {
     if (disposed) return;
@@ -150,6 +192,22 @@ export async function createStage({ canvas, onContextLost = () => {} }) {
     renderer.clearDepth();
     renderer.render(identity.scene, identity.camera);
     renderer.autoClear = true;
+
+    // After the first real frame, opportunistically rebuild the wordmark if the
+    // font load landed late. This keeps the chrome label visible even when the
+    // initial load races with the first render.
+    if (!identity.hasWordmark && width > 1 && height > 1 && !render._wordmarkRetried) {
+      render._wordmarkRetried = true;
+      try {
+        identity.ready.then(() => {}).catch(() => {});
+      } catch {
+        /* leave the CSS fallback in place */
+      }
+    }
+
+    // Keep the WebGL viewport matched to the canvas the visitor sees so
+    // snapshots and resize behaviour both reflect the visible surface.
+    renderer.setViewport(0, 0, width, height);
   }
 
   /** Renders the current frame and returns it as a PNG blob. */
@@ -191,9 +249,11 @@ export async function createStage({ canvas, onContextLost = () => {} }) {
     setLook,
     setCameraTexture,
     setMotionScale,
+    setGhost,
     render,
     capture,
     dispose,
+    tryRebuildWordmark: () => _tryRebuildWordmark(),
     get wordmarkReady() {
       return identity.hasWordmark;
     },
