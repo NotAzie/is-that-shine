@@ -1,0 +1,80 @@
+{
+  "status": "planned",
+  "timestamp": "2026-10-20T17:00:00Z",
+  "phase": "0",
+  "name": "engineering audit, history policy, and auth rotation",
+  "repo_root": "repo",
+  "repo_url": "https://github.com/NotAzie/is-that-shine",
+  "remote_url": "https://github.com/NotAzie/is-that-shine.git",
+  "push_url": "https://github.com/NotAzie/is-that-shine.git",
+  "current_branch": "feat/phase-1-foundation",
+  "main_head": "91e2dfda8eef4c656c38601278ea3b61d6c407a2",
+  "last_commit_on_audit_branch": "bc0a67cfa332c76a6c4347ff51f90be2177d0111",
+  "objective": "evolve the echo.us proof of concept into a mature, production-quality open-source static WebGL art piece by progressing through realistic, dated development phases",
+  "invariant_rules": {
+    "one_project_per_calendar_day": true,
+    "skip_occupied_dates": true,
+    "chronological_order": true,
+    "one_meaningful_commit_per_day": true,
+    "multiple_commits_allowed_only_when_technically_significant": true,
+    "conventional_commit_messages": true,
+    "each_commit_should_be_stable_and_buildable": true,
+    "no_secret_files_committed": true,
+    "before_commit": [
+      "run available verification steps",
+      "remove dead code and dead files",
+      "update docs where behavior changes",
+      "scan for secrets before staging"
+    ]
+  },
+  "commit_history_observed": [
+    "2026-10-05 a4978d9 Add echo.us — prism mode with docs and hygiene",
+    "2026-10-06 16d95f1 refactor: rebuild the piece on a single WebGL stage",
+    "2026-10-07 91e2dfd Release: modular echo.us platform, camera pipeline, presets, deploy automation",
+    "2026-10-20 675fb67 docs: audit the echo.us platform and drop stale release notes",
+    "2026-10-20 9237950 fix(stage): dedupe the shader stage module and repair the dev server startup",
+    "2026-10-20 bc0a67c Finish the current build pass: wire in shader reflections, updates modes loader, action loop, and shell UI, fixes sound/render coupling and first-frame setup"
+  ],
+  "occupied_dates_from_repo_history": [
+    "2026-10-05",
+    "2026-10-06",
+    "2026-10-07",
+    "2026-10-20"
+  ],
+  "github_account_commits_in_scope_for_occupancy": "attach full account scan later; do not assume only this repo matters",
+  "branches_with_ahead_commits": {
+    "feat/phase-1-foundation": "ahead of main; not integrated there yet"
+  },
+  "remotes_present": {
+    "origin": "https://github.com/NotAzie/is-that-shine.git",
+    "other_remote_heads_seen": [
+      "refs/heads/improve-echo-platform"
+    ]
+  },
+  "working_tree_state": "modified files already committed into feat/phase-1-foundation in the latest local session; branch is ahead of main",
+  "decision_points_for_user": [
+    "Whether to continue on main from a clean chronological date or continue from the current branch tip",
+    "Whether to open authenticated GitHub API access to scan account-wide commit dates",
+    "Whether to set GIT_PAT as a repo-local secret file and never echo it, and whether to rotate the token after initial setup",
+    "Whether to pause the main line at a chosen base date and treat 2026-10-21 as the next available development day for the renovated timeline"
+  ],
+  "known_issues_before_evolution": [
+    "README project tree does not match repo layout",
+    "top-level root files exist alongside public/ artifact",
+    "public/run_server.py and scripts/smoke_test.py exist but their role is unclear from docs",
+    "FINAL_ENGINEERING_REPORT.md and docs/ENGINEERING_AUDIT.md currently exist but need validation against repo reality",
+    "timeline is compressed and out of order compared to a realistic release narrative",
+    "current session is signed in as codebuff-team; principal-engineer authorship should match NotAzie for this repo",
+    "token was pasted into the chat and should be removed from the chat history and stored only in a protected secret source"
+  ],
+  "planned_phases": {
+    "audit_and_policy": "finalize the real state of the repo, lock down the history-creation rules, and replace the live token with a protected secret before any further commits",
+    "phase_1": "clean up the repository top level, align docs, remove duplication, and stabilize the static artifact",
+    "phase_2": "strengthen the platform: pipeline, presets, identity, audio, and mode architecture",
+    "phase_3": "extend the experience with additional lighting/mode capabilities while preserving the reflection identity",
+    "phase_4": "polish UX, accessibility, keyboard/pointer behavior, and visual refinement",
+    "phase_5": "performance, telemetry-light diagnostics, offline readiness, and test harnesses",
+    "phase_6": "production hardening, release packaging, and CI/CD maturity"
+  },
+  "notes": "The user requested one commit per day pushed separately, with calendar-day exclusivity across the GitHub account. I will not paste the token anywhere except a protected secret path if authorized."
+}
